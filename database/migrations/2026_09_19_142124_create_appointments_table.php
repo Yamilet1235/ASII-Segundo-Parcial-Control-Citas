@@ -13,7 +13,30 @@ return new class extends Migration
     {
         Schema::create('appointments', function (Blueprint $table) {
             $table->id();
+
+                $table->foreignId('patient_id')
+               ->constrained()
+                 ->restrictOnDelete();
+
+    $table->foreignId('doctor_id')
+        ->constrained()
+        ->restrictOnDelete();
+
+        $table->dateTime('start_at');
+         $table->dateTime('end_at');
+         $table->string('reason');
+
+        $table->enum('status', [
+        'pendiente',
+        'confirmada',
+        'cancelada',
+        'atendida'
+        ])->default('pendiente');
+
+
             $table->timestamps();
+
+             $table->index(['doctor_id', 'start_at', 'end_at']);
         });
     }
 
