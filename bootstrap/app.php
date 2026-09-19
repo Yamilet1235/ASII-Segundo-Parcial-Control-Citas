@@ -1,5 +1,6 @@
 <?php
 
+use App\Exceptions\ScheduleConflictException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -15,5 +16,10 @@ return Application::configure(basePath: dirname(__DIR__))
         //
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        $exceptions->render(function (ScheduleConflictException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'error' => 'SCHEDULE_CONFLICT',
+            ], 409);
+        });
     })->create();

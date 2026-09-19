@@ -2,7 +2,10 @@
 
 namespace App\Services;
 
+use App\Exceptions\ScheduleConflictException;
 use App\Models\Appointment;
+use App\Models\Doctor;
+use Illuminate\Support\Facades\DB;
 
 class AppointmentService
 {
@@ -37,25 +40,104 @@ class AppointmentService
 
     public function create(array $data): Appointment
     {
-        return Appointment::create($data)
-            ->load(['patient', 'doctor']);
+        return DB::transaction(function () use ($data) {
+            $doctorId = (int) $data['doctor_id'];
+
+            $this->lockDoctor($doctorId);
+
+            if (($data['status'] ?? 'pendiente') !== 'cancelada') {
+                $this->ensureScheduleIsAvailable(
+                    $doctorId,
+                    $data['start_at'],
+                    $data['end_at']
+                );
+            }
+
+            return Appointment::create($data)
+                ->load(['patient', 'doctor']);
+        });
     }
 
     public function update(int $id, array $data): Appointment
     {
-        $appointment = Appointment::findOrFail($id);
-        $appointment->update($data);
+        return DB::transaction(function () use ($id, $data) {
+            $appointment = Appointment::query()
+                ->lockForUpdate()
+                ->findOrFail($id);
+            $doctorId = (int) ($data['doctor_id'] ?? $appointment->doctor_id);
+            $startAt = $data['start_at'] ?? $appointment->start_at;
+            $endAt = $data['end_at'] ?? $appointment->end_at;
+            $status = $data['status'] ?? $appointment->status;
 
-        return $appointment->load(['patient', 'doctor']);
+            $this->lockDoctor($doctorId);
+
+            if ($status !== 'cancelada') {
+                $this->ensureScheduleIsAvailable(
+                    $doctorId,
+                    $startAt,
+                    $endAt,
+                    $appointment->id
+                );
+            }
+
+            $appointment->update($data);
+
+            return $appointment->load(['patient', 'doctor']);
+        });
     }
 
     public function changeStatus(int $id, string $status): Appointment
     {
-        $appointment = Appointment::findOrFail($id);
-        $appointment->update([
-            'status' => $status,
-        ]);
+        return DB::transaction(function () use ($id, $status) {
+            $appointment = Appointment::query()
+                ->lockForUpdate()
+                ->findOrFail($id);
 
-        return $appointment->load(['patient', 'doctor']);
+            $this->lockDoctor($appointment->doctor_id);
+
+            if ($status !== 'cancelada') {
+                $this->ensureScheduleIsAvailable(
+                    $appointment->doctor_id,
+                    $appointment->start_at,
+                    $appointment->end_at,
+                    $appointment->id
+                );
+            }
+
+            $appointment->update([
+                'status' => $status,
+            ]);
+
+            return $appointment->load(['patient', 'doctor']);
+        });
+    }
+
+    private function lockDoctor(int $doctorId): void
+    {
+        Doctor::query()
+            ->whereKey($doctorId)
+            ->lockForUpdate()
+            ->firstOrFail();
+    }
+
+    private function ensureScheduleIsAvailable(
+        int $doctorId,
+        string $startAt,
+        string $endAt,
+        ?int $ignoredAppointmentId = null
+    ): void {
+        $hasConflict = Appointment::query()
+            ->where('doctor_id', $doctorId)
+            ->where('status', '!=', 'cancelada')
+            ->where('start_at', '<', $endAt)
+            ->where('end_at', '>', $startAt)
+            ->when($ignoredAppointmentId, function ($query, $id) {
+                $query->whereKeyNot($id);
+            })
+            ->exists();
+
+        if ($hasConflict) {
+            throw new ScheduleConflictException;
+        }
     }
 }
