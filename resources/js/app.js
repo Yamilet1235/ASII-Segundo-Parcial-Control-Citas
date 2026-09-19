@@ -89,6 +89,25 @@ if (root) {
         }
     };
 
+    const toDatabaseDate = (date) => {
+        const pad = (value) => String(value).padStart(2, '0');
+        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+    };
+
+    const saveSchedule = async ({ event, revert }) => {
+        try {
+            const appointment = await request('put', `/api/citas/${event.id}`, {
+                start_at: toDatabaseDate(event.start),
+                end_at: toDatabaseDate(event.end),
+            });
+            event.setExtendedProp('appointment', appointment);
+            showDetail(appointment);
+            showNotice('El horario fue actualizado correctamente.');
+        } catch {
+            revert();
+        }
+    };
+
     const calendar = new Calendar(document.querySelector('#calendar'), {
         plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin],
         locale: esLocale,
@@ -101,7 +120,10 @@ if (root) {
         buttonText: { today: 'Hoy', month: 'Mes', week: 'Semana' },
         nowIndicator: true,
         height: 'auto',
+        editable: true,
         eventClick: ({ event }) => showDetail(event.extendedProps.appointment),
+        eventDrop: saveSchedule,
+        eventResize: saveSchedule,
         events: async (_info, success, failure) => {
             try {
                 success((await request('get', '/api/citas')).map(toEvent));
@@ -116,6 +138,20 @@ if (root) {
     document.querySelector('#new-appointment').addEventListener('click', openDialog);
     document.querySelector('#close-dialog').addEventListener('click', () => dialog.close());
     document.querySelector('#cancel-dialog').addEventListener('click', () => dialog.close());
+    document.querySelector('#save-status').addEventListener('click', async () => {
+        const appointmentId = detailContent.dataset.appointmentId;
+
+        try {
+            const appointment = await request('patch', `/api/citas/${appointmentId}/estado`, {
+                status: document.querySelector('#detail-status').value,
+            });
+            showDetail(appointment);
+            calendar.refetchEvents();
+            showNotice('El estado fue actualizado correctamente.');
+        } catch {
+            // request() keeps the previous state and shows the API error.
+        }
+    });
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
 
