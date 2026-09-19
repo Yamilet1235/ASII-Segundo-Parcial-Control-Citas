@@ -1,0 +1,17 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: citas_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: citas_medicas
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: citas_user
+      MYSQL_PASSWORD: citas123
+    ports:
+      - "3307:3306"
+    volumes:
+      - citas_mysql_data:/var/lib/mysql
+
+volumes:
+  citas_mysql_data:
