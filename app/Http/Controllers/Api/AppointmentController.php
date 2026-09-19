@@ -3,15 +3,16 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Appointment;
 use App\Services\AppointmentService;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class AppointmentController extends Controller
 {
     public function __construct(
         private AppointmentService $service
-    ) {
-    }
+    ) {}
 
     public function index(Request $request)
     {
@@ -28,11 +29,12 @@ class AppointmentController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'patient_id' => ['required', 'exists:patients,id'],
-            'doctor_id' => ['required', 'exists:doctors,id'],
+            'patient_id' => ['required', 'integer', 'exists:patients,id'],
+            'doctor_id' => ['required', 'integer', 'exists:doctors,id'],
             'start_at' => ['required', 'date'],
             'end_at' => ['required', 'date', 'after:start_at'],
             'reason' => ['required', 'string', 'max:255'],
+            'status' => ['sometimes', Rule::in(Appointment::STATUSES)],
         ]);
 
         $appointment = $this->service->create($data);
@@ -50,8 +52,8 @@ class AppointmentController extends Controller
     public function update(Request $request, int $id)
     {
         $data = $request->validate([
-            'patient_id' => ['sometimes', 'exists:patients,id'],
-            'doctor_id' => ['sometimes', 'exists:doctors,id'],
+            'patient_id' => ['sometimes', 'integer', 'exists:patients,id'],
+            'doctor_id' => ['sometimes', 'integer', 'exists:doctors,id'],
             'start_at' => ['sometimes', 'date'],
             'end_at' => ['sometimes', 'date'],
             'reason' => ['sometimes', 'string', 'max:255'],
@@ -67,7 +69,7 @@ class AppointmentController extends Controller
         $data = $request->validate([
             'status' => [
                 'required',
-                'in:pendiente,confirmada,cancelada,atendida',
+                Rule::in(Appointment::STATUSES),
             ],
         ]);
 
